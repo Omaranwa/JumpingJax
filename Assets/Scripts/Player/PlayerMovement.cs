@@ -350,7 +350,20 @@ public class PlayerMovement : MonoBehaviour
     // This function keeps the player from exceeding a maximum velocity
     private void ClampVelocity(float range)
     {
-        newVelocity = Vector3.ClampMagnitude(newVelocity, PlayerConstants.MaxVelocity);
+        if(newVelocity.x >= PlayerConstants.MaxVelocity)
+        {
+            newVelocity.x = PlayerConstants.MaxVelocity;
+        }
+
+        if (newVelocity.y >= PlayerConstants.MaxVelocity)
+        {
+            newVelocity.y = PlayerConstants.MaxVelocity;
+        }
+
+        if (newVelocity.z >= PlayerConstants.MaxVelocity)
+        {
+            newVelocity.z = PlayerConstants.MaxVelocity;
+        }
     }
 
     // This function is what keeps the player from walking through walls
