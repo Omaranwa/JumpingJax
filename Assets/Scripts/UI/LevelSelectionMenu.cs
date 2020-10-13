@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Analytics;
 using UnityEngine.Networking;
 using UnityEngine.UI;
 
@@ -81,6 +82,11 @@ public class LevelSelectionMenu : MonoBehaviour
     {
         for (int i = 0; i < levels.Length; i++)
         {
+            if(levels[i].developerOnlyLevel)
+            {
+                continue;
+            }
+
             GameObject newLevelButton = Instantiate(levelObjectPrefab, levelButtonParent);
             LevelButton levelButton = newLevelButton.GetComponentInChildren<LevelButton>();
 

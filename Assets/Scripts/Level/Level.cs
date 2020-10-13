@@ -20,6 +20,9 @@ public class Level : ScriptableObject
     [SerializeField]
     public Sprite previewSprite;
 
+    [SerializeField]
+    public bool developerOnlyLevel;
+
     [Header("Workshop data")]
     [SerializeField]
     public string description;
