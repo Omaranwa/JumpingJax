@@ -66,6 +66,12 @@ public class PlayerMovement : MonoBehaviour
         CheckGrounded();
         FixCeiling();
         ResolveCollisions();
+        SnapToGround();
+    }
+
+    private void SnapToGround()
+    {
+        //Physics.BoxCastAll
     }
 
     private void CheckCrouch()
@@ -109,7 +115,7 @@ public class PlayerMovement : MonoBehaviour
 
     private void ApplyGravity()
     {
-        if (!grounded && newVelocity.y < PlayerConstants.MaxFallSpeed)
+        if (!grounded && newVelocity.y > -PlayerConstants.MaxFallSpeed)
         {
             float gravityScale = currentLevel.gravityMultiplier;
             newVelocity.y -= gravityScale * PlayerConstants.Gravity * Time.fixedDeltaTime;
@@ -355,14 +361,29 @@ public class PlayerMovement : MonoBehaviour
             newVelocity.x = PlayerConstants.MaxVelocity;
         }
 
+        if(newVelocity.x <= -PlayerConstants.MaxVelocity)
+        {
+            newVelocity.x = -PlayerConstants.MaxVelocity;
+        }
+
         if (newVelocity.y >= PlayerConstants.MaxVelocity)
         {
             newVelocity.y = PlayerConstants.MaxVelocity;
         }
 
+        if (newVelocity.y <= -PlayerConstants.MaxVelocity)
+        {
+            newVelocity.y = -PlayerConstants.MaxVelocity;
+        }
+
         if (newVelocity.z >= PlayerConstants.MaxVelocity)
         {
             newVelocity.z = PlayerConstants.MaxVelocity;
+        }
+
+        if (newVelocity.z <= -PlayerConstants.MaxVelocity)
+        {
+            newVelocity.z = -PlayerConstants.MaxVelocity;
         }
     }
 
