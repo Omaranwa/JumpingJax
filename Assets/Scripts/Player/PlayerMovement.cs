@@ -35,7 +35,7 @@ public class PlayerMovement : MonoBehaviour
     {
         CheckCrouch();
         ApplyGravity();
-        CheckGrounded();
+        //CheckGrounded();
         FixCeiling();
 
         CheckJump();
@@ -63,10 +63,10 @@ public class PlayerMovement : MonoBehaviour
         ContinuousCollisionDetection();
 
         // Perform a second ground check after moving to prevent bugs at the beginning of the next frame
-        CheckGrounded();
-        FixCeiling();
-        ResolveCollisions();
-        SnapToGround();
+        //CheckGrounded();
+        //FixCeiling();
+        //ResolveCollisions();
+        //SnapToGround();
     }
 
     private void SnapToGround()
@@ -139,7 +139,7 @@ public class PlayerMovement : MonoBehaviour
         {
             if (showDebugGizmos)
             {
-                Debug.DrawRay(ray.origin, ray.direction, Color.yellow, 3);
+                //Debug.DrawRay(ray.origin, ray.direction, Color.yellow, 3);
             }
             if (Physics.Raycast(
                 ray: ray,
@@ -158,48 +158,6 @@ public class PlayerMovement : MonoBehaviour
         return false;
 
         
-    }
-
-    // Performs 5 raycasts to check if there is a spot on the BoxCollider which is below the player and sets the grounded status
-    private void CheckGrounded()
-    {
-        Ray[] boxTests = GetRays(Vector3.down);
-
-        bool willBeGrounded = false;
-
-        foreach(Ray ray in boxTests)
-        {
-            if (showDebugGizmos)
-            {
-                Debug.DrawRay(ray.origin, ray.direction, Color.blue, 3);
-            }
-            if(Physics.Raycast(
-                ray: ray,
-                hitInfo: out RaycastHit hit,
-                maxDistance: myCollider.bounds.extents.y + 0.2f, // add a small offset to allow the player to find the ground if ResolveCollision() sets us too far away
-                layerMask: layersToIgnore,
-                QueryTriggerInteraction.Ignore))
-            {
-                if(hit.point.y < transform.position.y && 
-                    !Physics.GetIgnoreCollision(myCollider, hit.collider) && // don't check for the ground on an object that is ignored (for example a wall with a portal on it)
-                    hit.normal.y > 0.7f) // don't check for the ground on a sloped surface above 45 degrees
-                {
-                    willBeGrounded = true;
-                }
-            }
-        }
-
-        if (newVelocity.y > 5)
-        {
-            willBeGrounded = false;
-        }
-
-        grounded = willBeGrounded;
-
-        if (grounded && newVelocity.y < 0)
-        {
-            newVelocity.y = 0;
-        }
     }
 
     private Ray[] GetRays(Vector3 direction)
@@ -409,23 +367,51 @@ public class PlayerMovement : MonoBehaviour
             .Where(hit => !hit.collider.isTrigger)
             .Where(hit => !Physics.GetIgnoreCollision(hit.collider, myCollider))
             .Where(hit => hit.point != Vector3.zero)
-            .Where(hit => hit.normal.y < 1)
             .ToList();
 
-        // If we are going to hit a wall, set ourselves just outside of the wall and translate momentum along the wall
-        if (validHits.Count() > 0 && newVelocity.magnitude > 10)
+        if (showDebugGizmos)
         {
+            DebugUtils.DrawCube(myCollider.bounds.center + (newVelocity * castDistance), myCollider.bounds.extents);
+        }
+
+        // If we are going to hit something, set ourselves just outside of the object and translate momentum along the wall
+        if (validHits.Count() > 0)
+        {
+
             // find the time at which we would have hit the wall between this and the next frame
             float timeToImpact = validHits.First().distance / newVelocity.magnitude;
             // slide along the wall and prevent a complete loss of momentum
             ClipVelocity(validHits.First().normal);
             // set our position to just outside of the wall
             transform.position += newVelocity * timeToImpact;
+            CheckGrounded(validHits);
+
         }
         else
         {
             transform.position += newVelocity * Time.fixedDeltaTime;
         }
+    }
+
+    private void CheckGrounded(List<RaycastHit> validHits)
+    {
+        bool shouldBeGrounded = false;
+
+        foreach (RaycastHit hit in validHits)
+        {
+            // If the slope is less than 45 degrees
+            if (hit.normal.y > 0.7f)
+            {
+                shouldBeGrounded = true;
+
+                if (shouldBeGrounded && newVelocity.y < 0)
+                {
+                    newVelocity.y = 0;
+                }
+            }
+        }
+
+        grounded = shouldBeGrounded;
     }
 
     //Slide off of the impacting surface
@@ -438,39 +424,4 @@ public class PlayerMovement : MonoBehaviour
         change.y = 0; // only affect horizontal velocity
         newVelocity -= change;
     }
-
-    private void ResolveCollisions()
-    {
-        var overlaps = Physics.OverlapBox(myCollider.bounds.center, myCollider.bounds.extents, Quaternion.identity);
-
-        foreach (var other in overlaps)
-        {
-            // If the collider is my own, check the next one
-            if (other == myCollider || other.isTrigger)
-            {
-                continue;
-            }
-
-            if (Physics.ComputePenetration(myCollider, transform.position, transform.rotation,
-                other, other.transform.position, other.transform.rotation,
-                out Vector3 dir, out float dist))
-            {
-                if (Vector3.Dot(dir, newVelocity.normalized) > 0 ||
-                    Physics.GetIgnoreCollision(myCollider, other))
-                {
-                    continue;
-                }
-
-                Vector3 depenetrationVector = dir * dist; // The vector needed to get outside of the collision
-
-                if (showDebugGizmos)
-                {
-                    Debug.Log($"Object Depenetration Vector: {depenetrationVector.ToString("F8")} \n Collided with: {other.gameObject.name}");
-                }
-
-                transform.position += depenetrationVector;
-            }
-        }
-    }
-
 }
