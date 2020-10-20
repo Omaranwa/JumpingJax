@@ -7,7 +7,7 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     [Header("Set In Editor")]
-    public LayerMask layersToIgnore;
+    public LayerMask collideableLayers;
 
     [Header("Debugging properties")]
     [Tooltip("Red line is current velocity, blue is the new direction")]
@@ -145,7 +145,7 @@ public class PlayerMovement : MonoBehaviour
                 ray: ray,
                 hitInfo: out RaycastHit hit,
                 maxDistance: myCollider.bounds.extents.y + distanceToCheck, // add a small offset to allow the player to find the ground is ResolveCollision() sets us too far away
-                layerMask: layersToIgnore,
+                layerMask: collideableLayers,
                 QueryTriggerInteraction.Ignore))
             {
                 if (hit.point.y > transform.position.y) 
@@ -351,15 +351,18 @@ public class PlayerMovement : MonoBehaviour
 
     private void ContinuousCollisionDetection()
     {
-        // - boxcast forwards based on speed, find the point in time where i hit it, and stop me there
+        StandingGroundCheck();
+
+        // - boxcast the player to the position the player will be in the next frame
+        // based on speed, find the point in time where the player hits and object, and it there
         float castDistance = newVelocity.magnitude * Time.fixedDeltaTime;
         RaycastHit[] hits = Physics.BoxCastAll(
             center: myCollider.bounds.center,
             halfExtents: myCollider.bounds.extents,
             direction: newVelocity.normalized,
-            Quaternion.identity,
+            orientation: Quaternion.identity,
             maxDistance: castDistance,
-            layerMask: layersToIgnore);
+            layerMask: collideableLayers);
 
         List<RaycastHit> validHits = hits
             .ToList()
@@ -370,26 +373,68 @@ public class PlayerMovement : MonoBehaviour
             .ToList();
 
         if (showDebugGizmos)
-        {
+        { 
+            // Show the collider of the player next frame
             DebugUtils.DrawCube(myCollider.bounds.center + (newVelocity * castDistance), myCollider.bounds.extents);
+            if(validHits.Count() > 0)
+            {
+                Debug.Log($"ccd hit : {validHits.First().collider.gameObject.name}");
+            }
         }
 
         // If we are going to hit something, set ourselves just outside of the object and translate momentum along the wall
         if (validHits.Count() > 0)
         {
-
             // find the time at which we would have hit the wall between this and the next frame
             float timeToImpact = validHits.First().distance / newVelocity.magnitude;
             // slide along the wall and prevent a complete loss of momentum
-            ClipVelocity(validHits.First().normal);
+            //ClipVelocity(validHits.First().normal);
             // set our position to just outside of the wall
             transform.position += newVelocity * timeToImpact;
-            CheckGrounded(validHits);
-
         }
         else
         {
             transform.position += newVelocity * Time.fixedDeltaTime;
+        }
+    }
+
+    private void StandingGroundCheck()
+    {
+        if(newVelocity.y > 0)
+        {
+            return;
+        }
+
+        float castDistance = Mathf.Abs(newVelocity.y * Time.fixedDeltaTime);
+
+        RaycastHit[] hits = Physics.BoxCastAll(
+            center: myCollider.bounds.center,
+            halfExtents: myCollider.bounds.extents,
+            direction: Vector3.down,
+            orientation: Quaternion.identity,
+            maxDistance: castDistance,
+            layerMask: collideableLayers);
+
+        List<RaycastHit> validHits = hits
+            .ToList()
+            .OrderBy(hit => hit.distance)
+            .Where(hit => !hit.collider.isTrigger)
+            .Where(hit => !Physics.GetIgnoreCollision(hit.collider, myCollider))
+            //.Where(hit => hit.point != Vector3.zero)
+            .ToList();
+
+        if (showDebugGizmos)
+        {
+            Debug.Log($"pos: {transform.position} vel: {newVelocity} dist: {castDistance} hits: {hits.Count()}, valid: {validHits.Count}");
+        }
+
+        if (validHits.Count > 0)
+        {
+            CheckGrounded(validHits);
+        }
+        else
+        {
+            grounded = false;
         }
     }
 
@@ -408,6 +453,10 @@ public class PlayerMovement : MonoBehaviour
                 {
                     newVelocity.y = 0;
                 }
+            }
+            else
+            {
+                Debug.Log($"can't step on {hit.collider.gameObject.name}");
             }
         }
 
