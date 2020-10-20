@@ -24,6 +24,11 @@ public class PlayerMovement : MonoBehaviour
     private CameraMove cameraMove;
     private Level currentLevel;
 
+    private void Awake()
+    {
+        newVelocity = Vector3.zero;
+    }
+
     private void Start()
     {
         myCollider = GetComponent<BoxCollider>();
@@ -385,10 +390,21 @@ public class PlayerMovement : MonoBehaviour
         // If we are going to hit something, set ourselves just outside of the object and translate momentum along the wall
         if (validHits.Count() > 0)
         {
-            // find the time at which we would have hit the wall between this and the next frame
-            float timeToImpact = validHits.First().distance / newVelocity.magnitude;
+            RaycastHit closestHit = validHits.First();
+            float timeToImpact;
+            if (closestHit.distance > 0 && newVelocity.magnitude == 0)
+            {    
+                //Prevent TimeToImpact being infinity
+                timeToImpact = Time.fixedDeltaTime;
+            }
+            else
+            {
+                // find the time at which we would have hit the wall between this and the next frame
+                timeToImpact = validHits.First().distance / newVelocity.magnitude;
+            }
+            
             // slide along the wall and prevent a complete loss of momentum
-            //ClipVelocity(validHits.First().normal);
+            ClipVelocity(validHits.First().normal);
             // set our position to just outside of the wall
             transform.position += newVelocity * timeToImpact;
         }
@@ -425,17 +441,10 @@ public class PlayerMovement : MonoBehaviour
 
         if (showDebugGizmos)
         {
-            Debug.Log($"pos: {transform.position} vel: {newVelocity} dist: {castDistance} hits: {hits.Count()}, valid: {validHits.Count}");
+            //Debug.Log($"pos: {transform.position} vel: {newVelocity} dist: {castDistance} hits: {hits.Count()}, valid: {validHits.Count}");
         }
 
-        if (validHits.Count > 0)
-        {
-            CheckGrounded(validHits);
-        }
-        else
-        {
-            grounded = false;
-        }
+        CheckGrounded(validHits);
     }
 
     private void CheckGrounded(List<RaycastHit> validHits)
@@ -467,10 +476,10 @@ public class PlayerMovement : MonoBehaviour
     private void ClipVelocity(Vector3 normal)
     {
         // Determine how far along plane to slide based on incoming direction.
-        var backoff = Vector3.Dot(newVelocity, normal);
+        var backoff = Vector3.Dot(newVelocity, normal) * PlayerConstants.Overbounce;
 
         var change = normal * backoff;
-        change.y = 0; // only affect horizontal velocity
+        //change.y = 0; // only affect horizontal velocity
         newVelocity -= change;
     }
 }
