@@ -66,17 +66,6 @@ public class PlayerMovement : MonoBehaviour
 
         ClampVelocity(PlayerConstants.MaxVelocity);
         ContinuousCollisionDetection();
-
-        // Perform a second ground check after moving to prevent bugs at the beginning of the next frame
-        //CheckGrounded();
-        //FixCeiling();
-        //ResolveCollisions();
-        //SnapToGround();
-    }
-
-    private void SnapToGround()
-    {
-        //Physics.BoxCastAll
     }
 
     private void CheckCrouch()
@@ -407,15 +396,36 @@ public class PlayerMovement : MonoBehaviour
             ClipVelocity(validHits.First().normal);
             // set our position to just outside of the wall
             transform.position += newVelocity * timeToImpact;
+
+            StepMove();
+            StayOnGround();
         }
         else
         {
             transform.position += newVelocity * Time.fixedDeltaTime;
+            if (grounded)
+            {
+                StayOnGround();
+            }
         }
+    }
+
+    private void StayOnGround()
+    {
+
+    }
+
+    private void StepMove()
+    {
+
     }
 
     private void StandingGroundCheck()
     {
+        if (newVelocity.y > 1) {
+            grounded = false;
+        }
+
         if(newVelocity.y > 0)
         {
             return;
