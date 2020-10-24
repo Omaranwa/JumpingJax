@@ -18,6 +18,8 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField]
     private bool grounded;
     [SerializeField]
+    private bool wasGrounded;
+    [SerializeField]
     private bool crouching;
 
     private BoxCollider myCollider;
@@ -372,7 +374,7 @@ public class PlayerMovement : MonoBehaviour
             DebugUtils.DrawCube(myCollider.bounds.center + (newVelocity * castDistance), myCollider.bounds.extents);
             if(validHits.Count() > 0)
             {
-                Debug.Log($"ccd hit : {validHits.First().collider.gameObject.name}");
+                //Debug.Log($"ccd hit : {validHits.First().collider.gameObject.name}");
             }
         }
 
@@ -389,30 +391,59 @@ public class PlayerMovement : MonoBehaviour
             else
             {
                 // find the time at which we would have hit the wall between this and the next frame
-                timeToImpact = validHits.First().distance / newVelocity.magnitude;
+                timeToImpact = closestHit.distance / newVelocity.magnitude;
             }
             
             // slide along the wall and prevent a complete loss of momentum
-            ClipVelocity(validHits.First().normal);
+            ClipVelocity(closestHit.normal);
             // set our position to just outside of the wall
             transform.position += newVelocity * timeToImpact;
 
-            StepMove();
-            StayOnGround();
+            //StepMove();
         }
         else
         {
             transform.position += newVelocity * Time.fixedDeltaTime;
-            if (grounded)
-            {
-                StayOnGround();
-            }
+            //StayOnGround();
         }
+        wasGrounded = grounded;
     }
 
     private void StayOnGround()
     {
+        // If we are already on the ground, we don't need to do anything
+        if (grounded)
+        {
+            return;
+        }
 
+        // If we were on the ground last frame, let's try to snap to the ground this frame
+        if (wasGrounded && newVelocity.y <= 0)
+        {
+            RaycastHit[] hits = Physics.BoxCastAll(
+            center: myCollider.bounds.center,
+            halfExtents: myCollider.bounds.extents,
+            direction: Vector3.down,
+            orientation: Quaternion.identity,
+            maxDistance: 1,
+            layerMask: collideableLayers);
+
+            List<RaycastHit> validHits = hits
+                .ToList()
+                .OrderBy(hit => hit.distance)
+                .Where(hit => !hit.collider.isTrigger)
+                .Where(hit => !Physics.GetIgnoreCollision(hit.collider, myCollider))
+                //.Where(hit => hit.point != Vector3.zero)
+                .ToList();
+
+            if(validHits.Count > 0)
+            {
+                RaycastHit closest = validHits.First();
+                Vector3 newPos = transform.position;
+                newPos.y -= closest.distance;
+                transform.position = newPos;
+            }
+        }
     }
 
     private void StepMove()
@@ -422,12 +453,8 @@ public class PlayerMovement : MonoBehaviour
 
     private void StandingGroundCheck()
     {
-        if (newVelocity.y > 1) {
+        if (newVelocity.y > 3) {
             grounded = false;
-        }
-
-        if(newVelocity.y > 0)
-        {
             return;
         }
 
@@ -470,6 +497,7 @@ public class PlayerMovement : MonoBehaviour
 
                 if (shouldBeGrounded && newVelocity.y < 0)
                 {
+                    ClipVelocity(hit.normal);
                     newVelocity.y = 0;
                 }
             }
