@@ -10,7 +10,7 @@ public static class PlayerConstants
     public static float MaxVelocity = 60f;
     public static float MaxReasonableVelocity = 30f;
     public static float MaxFallSpeed = 40f;
-    public static float StepOffset = 0.3f;
+    public static float StepOffset = 0.45f;
 
     public static float Gravity = 15f;
     public static float JumpPower = 5.6f;

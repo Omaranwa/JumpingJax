@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using static BoxCastUtils;
 
 [RequireComponent(typeof(BoxCollider))] // Collider is necessary for custom collision detection
 [RequireComponent(typeof(Rigidbody))] // Rigidbody is necessary to ignore certain colliders for portals
@@ -404,45 +405,36 @@ public class PlayerMovement : MonoBehaviour
         else
         {
             transform.position += newVelocity * Time.fixedDeltaTime;
-            //StayOnGround();
+            StayOnGround();
         }
         wasGrounded = grounded;
     }
 
     private void StayOnGround()
     {
-        // If we are already on the ground, we don't need to do anything
-        if (grounded)
+        SourceBoxCastOutput castOutput;
+        Vector3 start = myCollider.bounds.center;
+        start.y += PlayerConstants.StepOffset;
+        Vector3 end = myCollider.bounds.center;
+        end.y = PlayerConstants.StepOffset;
+
+        // See how far up we can go without getting stuck
+        SourceBoxCast(new SourceBoxCastInput(myCollider.bounds.center, start, collideableLayers, myCollider), out castOutput);
+        start = castOutput.endPosition;
+
+        // Now trace down from a known safe position
+        SourceBoxCast(new SourceBoxCastInput(start, end, collideableLayers, myCollider), out castOutput);
+
+        if(castOutput.fraction > 0 &&   // Must go somewhere
+            castOutput.fraction < 1 &&  // Must hit something
+            castOutput.normal.y > 0.7f) // can't hit a steep slope
         {
-            return;
-        }
+            float zDelta = Mathf.Abs(transform.position.z - castOutput.endPosition.z);
 
-        // If we were on the ground last frame, let's try to snap to the ground this frame
-        if (wasGrounded && newVelocity.y <= 0)
-        {
-            RaycastHit[] hits = Physics.BoxCastAll(
-            center: myCollider.bounds.center,
-            halfExtents: myCollider.bounds.extents,
-            direction: Vector3.down,
-            orientation: Quaternion.identity,
-            maxDistance: 1,
-            layerMask: collideableLayers);
-
-            List<RaycastHit> validHits = hits
-                .ToList()
-                .OrderBy(hit => hit.distance)
-                .Where(hit => !hit.collider.isTrigger)
-                .Where(hit => !Physics.GetIgnoreCollision(hit.collider, myCollider))
-                //.Where(hit => hit.point != Vector3.zero)
-                .ToList();
-
-            if(validHits.Count > 0)
-            {
-                RaycastHit closest = validHits.First();
-                Vector3 newPos = transform.position;
-                newPos.y -= closest.distance;
-                transform.position = newPos;
-            }
+            //if( zDelta > 0.01f)
+            //{
+                transform.position = castOutput.endPosition;
+            //}
         }
     }
 
@@ -513,6 +505,12 @@ public class PlayerMovement : MonoBehaviour
     //Slide off of the impacting surface
     private void ClipVelocity(Vector3 normal)
     {
+        // Keep from continuously bouncing, let friction handle stopping
+        //if(newVelocity.magnitude < 1)
+        //{
+        //    return;
+        //}
+
         // Determine how far along plane to slide based on incoming direction.
         var backoff = Vector3.Dot(newVelocity, normal) * PlayerConstants.Overbounce;
 
