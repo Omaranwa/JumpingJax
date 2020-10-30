@@ -412,6 +412,7 @@ public class PlayerMovement : MonoBehaviour
 
     private void StayOnGround()
     {
+        // TODO : fix slope check
         SourceBoxCastOutput castOutput;
         Vector3 start = myCollider.bounds.center;
         start.y += PlayerConstants.StepOffset;
