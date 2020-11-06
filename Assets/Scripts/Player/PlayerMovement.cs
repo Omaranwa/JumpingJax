@@ -1,13 +1,14 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using static BoxCastUtils;
 
 [RequireComponent(typeof(BoxCollider))] // Collider is necessary for custom collision detection
 [RequireComponent(typeof(Rigidbody))] // Rigidbody is necessary to ignore certain colliders for portals
 public class PlayerMovement : MonoBehaviour
 {
     [Header("Set In Editor")]
-    public LayerMask layersToIgnore;
+    public LayerMask collideableLayers;
 
     [Header("Debugging properties")]
     [Tooltip("Red line is current velocity, blue is the new direction")]
@@ -18,11 +19,18 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField]
     private bool grounded;
     [SerializeField]
+    private bool wasGrounded;
+    [SerializeField]
     private bool crouching;
 
     private BoxCollider myCollider;
     private CameraMove cameraMove;
     private Level currentLevel;
+
+    private void Awake()
+    {
+        newVelocity = Vector3.zero;
+    }
 
     private void Start()
     {
@@ -35,7 +43,7 @@ public class PlayerMovement : MonoBehaviour
     {
         CheckCrouch();
         ApplyGravity();
-        CheckGrounded();
+        //CheckGrounded();
         FixCeiling();
 
         CheckJump();
@@ -61,11 +69,6 @@ public class PlayerMovement : MonoBehaviour
 
         ClampVelocity(PlayerConstants.MaxVelocity);
         ContinuousCollisionDetection();
-
-        // Perform a second ground check after moving to prevent bugs at the beginning of the next frame
-        CheckGrounded();
-        FixCeiling();
-        ResolveCollisions();
     }
 
     private void CheckCrouch()
@@ -94,7 +97,7 @@ public class PlayerMovement : MonoBehaviour
         myCollider.size = new Vector3(myCollider.size.x, height, myCollider.size.z);
 
         DampenCamera();
-        
+
     }
 
     private void DampenCamera()
@@ -109,7 +112,7 @@ public class PlayerMovement : MonoBehaviour
 
     private void ApplyGravity()
     {
-        if (!grounded && newVelocity.y < PlayerConstants.MaxFallSpeed)
+        if (!grounded && newVelocity.y > -PlayerConstants.MaxFallSpeed)
         {
             float gravityScale = currentLevel.gravityMultiplier;
             newVelocity.y -= gravityScale * PlayerConstants.Gravity * Time.fixedDeltaTime;
@@ -133,16 +136,16 @@ public class PlayerMovement : MonoBehaviour
         {
             if (showDebugGizmos)
             {
-                Debug.DrawRay(ray.origin, ray.direction, Color.yellow, 3);
+                //Debug.DrawRay(ray.origin, ray.direction, Color.yellow, 3);
             }
             if (Physics.Raycast(
                 ray: ray,
                 hitInfo: out RaycastHit hit,
                 maxDistance: myCollider.bounds.extents.y + distanceToCheck, // add a small offset to allow the player to find the ground is ResolveCollision() sets us too far away
-                layerMask: layersToIgnore,
+                layerMask: collideableLayers,
                 QueryTriggerInteraction.Ignore))
             {
-                if (hit.point.y > transform.position.y) 
+                if (hit.point.y > transform.position.y)
                 {
                     return true;
                 }
@@ -151,49 +154,7 @@ public class PlayerMovement : MonoBehaviour
 
         return false;
 
-        
-    }
 
-    // Performs 5 raycasts to check if there is a spot on the BoxCollider which is below the player and sets the grounded status
-    private void CheckGrounded()
-    {
-        Ray[] boxTests = GetRays(Vector3.down);
-
-        bool willBeGrounded = false;
-
-        foreach(Ray ray in boxTests)
-        {
-            if (showDebugGizmos)
-            {
-                Debug.DrawRay(ray.origin, ray.direction, Color.blue, 3);
-            }
-            if(Physics.Raycast(
-                ray: ray,
-                hitInfo: out RaycastHit hit,
-                maxDistance: myCollider.bounds.extents.y + 0.2f, // add a small offset to allow the player to find the ground is ResolveCollision() sets us too far away
-                layerMask: layersToIgnore,
-                QueryTriggerInteraction.Ignore))
-            {
-                if(hit.point.y < transform.position.y && 
-                    !Physics.GetIgnoreCollision(myCollider, hit.collider) && // don't check for the ground on an object that is ignored (for example a wall with a portal on it)
-                    hit.normal.y > 0.7f) // don't check for the ground on a sloped surface above 45 degrees
-                {
-                    willBeGrounded = true;
-                }
-            }
-        }
-
-        if (newVelocity.y > 5)
-        {
-            willBeGrounded = false;
-        }
-
-        grounded = willBeGrounded;
-
-        if (grounded && newVelocity.y < 0)
-        {
-            newVelocity.y = 0;
-        }
     }
 
     private Ray[] GetRays(Vector3 direction)
@@ -350,7 +311,35 @@ public class PlayerMovement : MonoBehaviour
     // This function keeps the player from exceeding a maximum velocity
     private void ClampVelocity(float range)
     {
-        newVelocity = Vector3.ClampMagnitude(newVelocity, PlayerConstants.MaxVelocity);
+        if (newVelocity.x >= PlayerConstants.MaxVelocity)
+        {
+            newVelocity.x = PlayerConstants.MaxVelocity;
+        }
+
+        if (newVelocity.x <= -PlayerConstants.MaxVelocity)
+        {
+            newVelocity.x = -PlayerConstants.MaxVelocity;
+        }
+
+        if (newVelocity.y >= PlayerConstants.MaxVelocity)
+        {
+            newVelocity.y = PlayerConstants.MaxVelocity;
+        }
+
+        if (newVelocity.y <= -PlayerConstants.MaxVelocity)
+        {
+            newVelocity.y = -PlayerConstants.MaxVelocity;
+        }
+
+        if (newVelocity.z >= PlayerConstants.MaxVelocity)
+        {
+            newVelocity.z = PlayerConstants.MaxVelocity;
+        }
+
+        if (newVelocity.z <= -PlayerConstants.MaxVelocity)
+        {
+            newVelocity.z = -PlayerConstants.MaxVelocity;
+        }
     }
 
     // This function is what keeps the player from walking through walls
@@ -359,15 +348,18 @@ public class PlayerMovement : MonoBehaviour
 
     private void ContinuousCollisionDetection()
     {
-        // - boxcast forwards based on speed, find the point in time where i hit it, and stop me there
+        StandingGroundCheck();
+
+        // - boxcast the player to the position the player will be in the next frame
+        // based on speed, find the point in time where the player hits and object, and it there
         float castDistance = newVelocity.magnitude * Time.fixedDeltaTime;
         RaycastHit[] hits = Physics.BoxCastAll(
             center: myCollider.bounds.center,
             halfExtents: myCollider.bounds.extents,
             direction: newVelocity.normalized,
-            Quaternion.identity,
+            orientation: Quaternion.identity,
             maxDistance: castDistance,
-            layerMask: layersToIgnore);
+            layerMask: collideableLayers);
 
         List<RaycastHit> validHits = hits
             .ToList()
@@ -375,68 +367,157 @@ public class PlayerMovement : MonoBehaviour
             .Where(hit => !hit.collider.isTrigger)
             .Where(hit => !Physics.GetIgnoreCollision(hit.collider, myCollider))
             .Where(hit => hit.point != Vector3.zero)
-            .Where(hit => hit.normal.y < 1)
             .ToList();
 
-        // If we are going to hit a wall, set ourselves just outside of the wall and translate momentum along the wall
-        if (validHits.Count() > 0 && newVelocity.magnitude > 10)
+        if (showDebugGizmos)
         {
-            // find the time at which we would have hit the wall between this and the next frame
-            float timeToImpact = validHits.First().distance / newVelocity.magnitude;
+            // Show the collider of the player next frame
+            DebugUtils.DrawCube(myCollider.bounds.center + (newVelocity * castDistance), myCollider.bounds.extents);
+            if (validHits.Count() > 0)
+            {
+                //Debug.Log($"ccd hit : {validHits.First().collider.gameObject.name}");
+            }
+        }
+
+        // If we are going to hit something, set ourselves just outside of the object and translate momentum along the wall
+        if (validHits.Count() > 0)
+        {
+            RaycastHit closestHit = validHits.First();
+            float timeToImpact;
+            if (closestHit.distance > 0 && newVelocity.magnitude == 0)
+            {
+                //Prevent TimeToImpact being infinity
+                timeToImpact = Time.fixedDeltaTime;
+            }
+            else
+            {
+                // find the time at which we would have hit the wall between this and the next frame
+                timeToImpact = closestHit.distance / newVelocity.magnitude;
+            }
+
             // slide along the wall and prevent a complete loss of momentum
-            ClipVelocity(validHits.First().normal);
+            ClipVelocity(closestHit.normal);
             // set our position to just outside of the wall
             transform.position += newVelocity * timeToImpact;
+
+            //StepMove();
         }
         else
         {
             transform.position += newVelocity * Time.fixedDeltaTime;
+            StayOnGround();
         }
+        wasGrounded = grounded;
+    }
+
+    private void StayOnGround()
+    {
+        // TODO : fix slope check
+        SourceBoxCastOutput castOutput;
+        Vector3 start = myCollider.bounds.center;
+        start.y += PlayerConstants.StepOffset;
+        Vector3 end = myCollider.bounds.center;
+        end.y = PlayerConstants.StepOffset;
+
+        // See how far up we can go without getting stuck
+        SourceBoxCast(new SourceBoxCastInput(myCollider.bounds.center, start, collideableLayers, myCollider), out castOutput);
+        start = castOutput.endPosition;
+
+        // Now trace down from a known safe position
+        SourceBoxCast(new SourceBoxCastInput(start, end, collideableLayers, myCollider), out castOutput);
+
+        if (castOutput.fraction > 0 &&   // Must go somewhere
+            castOutput.fraction < 1 &&  // Must hit something
+            castOutput.normal.y > 0.7f) // can't hit a steep slope
+        {
+            float zDelta = Mathf.Abs(transform.position.z - castOutput.endPosition.z);
+
+            //if( zDelta > 0.01f)
+            //{
+            transform.position = castOutput.endPosition;
+            //}
+        }
+    }
+
+    private void StepMove()
+    {
+
+    }
+
+    private void StandingGroundCheck()
+    {
+        if (newVelocity.y > 3)
+        {
+            grounded = false;
+            return;
+        }
+
+        float castDistance = Mathf.Abs(newVelocity.y * Time.fixedDeltaTime);
+
+        RaycastHit[] hits = Physics.BoxCastAll(
+            center: myCollider.bounds.center,
+            halfExtents: myCollider.bounds.extents,
+            direction: Vector3.down,
+            orientation: Quaternion.identity,
+            maxDistance: castDistance,
+            layerMask: collideableLayers);
+
+        List<RaycastHit> validHits = hits
+            .ToList()
+            .OrderBy(hit => hit.distance)
+            .Where(hit => !hit.collider.isTrigger)
+            .Where(hit => !Physics.GetIgnoreCollision(hit.collider, myCollider))
+            //.Where(hit => hit.point != Vector3.zero)
+            .ToList();
+
+        if (showDebugGizmos)
+        {
+            //Debug.Log($"pos: {transform.position} vel: {newVelocity} dist: {castDistance} hits: {hits.Count()}, valid: {validHits.Count}");
+        }
+
+        CheckGrounded(validHits);
+    }
+
+    private void CheckGrounded(List<RaycastHit> validHits)
+    {
+        bool shouldBeGrounded = false;
+
+        foreach (RaycastHit hit in validHits)
+        {
+            // If the slope is less than 45 degrees
+            if (hit.normal.y > 0.7f)
+            {
+                shouldBeGrounded = true;
+
+                if (shouldBeGrounded && newVelocity.y < 0)
+                {
+                    ClipVelocity(hit.normal);
+                    newVelocity.y = 0;
+                }
+            }
+            else
+            {
+                Debug.Log($"can't step on {hit.collider.gameObject.name}");
+            }
+        }
+
+        grounded = shouldBeGrounded;
     }
 
     //Slide off of the impacting surface
     private void ClipVelocity(Vector3 normal)
     {
+        // Keep from continuously bouncing, let friction handle stopping
+        //if(newVelocity.magnitude < 1)
+        //{
+        //    return;
+        //}
+
         // Determine how far along plane to slide based on incoming direction.
-        var backoff = Vector3.Dot(newVelocity, normal);
+        var backoff = Vector3.Dot(newVelocity, normal) * PlayerConstants.Overbounce;
 
         var change = normal * backoff;
-        change.y = 0; // only affect horizontal velocity
+        //change.y = 0; // only affect horizontal velocity
         newVelocity -= change;
     }
-
-    private void ResolveCollisions()
-    {
-        var overlaps = Physics.OverlapBox(myCollider.bounds.center, myCollider.bounds.extents, Quaternion.identity);
-
-        foreach (var other in overlaps)
-        {
-            // If the collider is my own, check the next one
-            if (other == myCollider || other.isTrigger)
-            {
-                continue;
-            }
-
-            if (Physics.ComputePenetration(myCollider, transform.position, transform.rotation,
-                other, other.transform.position, other.transform.rotation,
-                out Vector3 dir, out float dist))
-            {
-                if (Vector3.Dot(dir, newVelocity.normalized) > 0 ||
-                    Physics.GetIgnoreCollision(myCollider, other))
-                {
-                    continue;
-                }
-
-                Vector3 depenetrationVector = dir * dist; // The vector needed to get outside of the collision
-
-                if (showDebugGizmos)
-                {
-                    Debug.Log($"Object Depenetration Vector: {depenetrationVector.ToString("F8")} \n Collided with: {other.gameObject.name}");
-                }
-
-                transform.position += depenetrationVector;
-            }
-        }
-    }
-
 }
