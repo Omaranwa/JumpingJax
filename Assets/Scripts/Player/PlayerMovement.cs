@@ -44,7 +44,7 @@ public class PlayerMovement : MonoBehaviour
         CheckCrouch();
         ApplyGravity();
         //CheckGrounded();
-        FixCeiling();
+        //FixCeiling();
 
         CheckJump();
 
@@ -375,7 +375,7 @@ public class PlayerMovement : MonoBehaviour
             DebugUtils.DrawCube(myCollider.bounds.center + (newVelocity * castDistance), myCollider.bounds.extents);
             if (validHits.Count() > 0)
             {
-                //Debug.Log($"ccd hit : {validHits.First().collider.gameObject.name}");
+                Debug.Log($"ccd hit : {validHits.First().collider.gameObject.name}");
             }
         }
 
@@ -417,7 +417,7 @@ public class PlayerMovement : MonoBehaviour
         Vector3 start = myCollider.bounds.center;
         start.y += PlayerConstants.StepOffset;
         Vector3 end = myCollider.bounds.center;
-        end.y = PlayerConstants.StepOffset;
+        end.y -= PlayerConstants.StepOffset;
 
         // See how far up we can go without getting stuck
         SourceBoxCast(new SourceBoxCastInput(myCollider.bounds.center, start, collideableLayers, myCollider), out castOutput);
